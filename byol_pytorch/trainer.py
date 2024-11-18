@@ -19,13 +19,15 @@ from accelerate.utils import DistributedDataParallelKwargs
 # constants
 
 DEFAULT_DDP_KWARGS = DistributedDataParallelKwargs(
-    find_unused_parameters = True
+    find_unused_parameters=True
 )
 
 # functions
 
+
 def exists(v):
     return v is not None
+
 
 def cycle(dl):
     while True:
@@ -33,6 +35,7 @@ def cycle(dl):
             yield batch
 
 # class
+
 
 class MockDataset(Dataset):
     def __init__(self, image_size, length):
@@ -47,6 +50,7 @@ class MockDataset(Dataset):
 
 # main trainer
 
+
 class BYOLTrainer(Module):
     @beartype
     def __init__(
@@ -59,7 +63,7 @@ class BYOLTrainer(Module):
         dataset: Dataset,
         num_train_steps: int,
         batch_size: int = 16,
-        optimizer_klass = Adam,
+        optimizer_klass=Adam,
         checkpoint_every: int = 1000,
         checkpoint_folder: str = './checkpoints',
         byol_kwargs: dict = dict(),
@@ -78,17 +82,20 @@ class BYOLTrainer(Module):
 
         self.net = net
 
-        self.byol = BYOL(net, image_size = image_size, hidden_layer = hidden_layer, **byol_kwargs)
+        self.byol = BYOL(net, image_size=image_size,
+                         hidden_layer=hidden_layer, **byol_kwargs)
 
-        self.optimizer = optimizer_klass(self.byol.parameters(), lr = learning_rate, **optimizer_kwargs)
+        self.optimizer = optimizer_klass(
+            self.byol.parameters(), lr=learning_rate, **optimizer_kwargs)
 
-        self.dataloader = DataLoader(dataset, shuffle = True, batch_size = batch_size)
+        self.dataloader = DataLoader(
+            dataset, shuffle=True, batch_size=batch_size)
 
         self.num_train_steps = num_train_steps
 
         self.checkpoint_every = checkpoint_every
         self.checkpoint_folder = Path(checkpoint_folder)
-        self.checkpoint_folder.mkdir(exist_ok = True, parents = True)
+        self.checkpoint_folder.mkdir(exist_ok=True, parents=True)
         assert self.checkpoint_folder.is_dir()
 
         # prepare with accelerate
@@ -116,7 +123,7 @@ class BYOLTrainer(Module):
         data_it = cycle(self.dataloader)
 
         for _ in range(self.num_train_steps):
-            images = next(data_it)
+            images = next(data_it)  # TODO: Adapt to pairs of images batches
 
             with self.accelerator.autocast():
                 loss = self.byol(images)
@@ -135,7 +142,8 @@ class BYOLTrainer(Module):
 
             if not (step % self.checkpoint_every) and self.accelerator.is_main_process:
                 checkpoint_num = step // self.checkpoint_every
-                checkpoint_path = self.checkpoint_folder / f'checkpoint.{checkpoint_num}.pt'
+                checkpoint_path = self.checkpoint_folder / \
+                    f'checkpoint.{checkpoint_num}.pt'
                 torch.save(self.net.state_dict(), str(checkpoint_path))
 
             self.wait()
