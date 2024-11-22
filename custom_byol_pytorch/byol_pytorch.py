@@ -198,36 +198,12 @@ class BYOL(nn.Module):
         hidden_layer=-2,
         projection_size=256,
         projection_hidden_size=4096,
-        augment_fn=None,
-        augment_fn2=None,
         moving_average_decay=0.99,
         use_momentum=True,
         sync_batchnorm=None
     ):
         super().__init__()
         self.net = net
-
-        # default SimCLR augmentation
-
-        DEFAULT_AUG = torch.nn.Sequential(
-            RandomApply(
-                T.ColorJitter(0.8, 0.8, 0.8, 0.2),
-                p=0.3
-            ),
-            T.RandomGrayscale(p=0.2),
-            T.RandomHorizontalFlip(),
-            RandomApply(
-                T.GaussianBlur((3, 3), (1.0, 2.0)),
-                p=0.2
-            ),
-            T.RandomResizedCrop((image_size, image_size)),
-            T.Normalize(
-                mean=torch.tensor([0.485, 0.456, 0.406]),
-                std=torch.tensor([0.229, 0.224, 0.225])),
-        )
-
-        self.augment1 = default(augment_fn, DEFAULT_AUG)
-        self.augment2 = default(augment_fn2, self.augment1)
 
         self.online_encoder = NetWrapper(
             net,
@@ -250,7 +226,9 @@ class BYOL(nn.Module):
         self.to(device)
 
         # send a mock image tensor to instantiate singleton parameters
-        self.forward(torch.randn(2, 3, image_size, image_size, device=device))
+        self.forward(
+            torch.randn(2, 3, image_size, image_size, device=device), 
+            torch.randn(2, 3, image_size, image_size, device=device))
 
     @singleton('target_encoder')
     def _get_target_encoder(self):
@@ -272,16 +250,7 @@ class BYOL(nn.Module):
         self,
         image_one,
         image_two,
-        # x,
-        # return_embedding = False,
-        # return_projection = True
     ):
-        # assert not (self.training and x.shape[0] == 1), 'you must have greater than 1 sample when training, due to the batchnorm in the projection layer'
-
-        # if return_embedding:
-        #     return self.online_encoder(x, return_projection = return_projection)
-
-        # image_one, image_two = self.augment1(x), self.augment2(x)
 
         assert (
             image_one.shape == image_two.shape and image_one.shape[0] > 1
