@@ -120,13 +120,13 @@ class BYOLTrainer(Module):
 
     def forward(self):
         step = self.step.item()
-        data_it = cycle(self.dataloader)
+        data_it = cycle(self.dataloader) # Has to return pairs of images
 
         for _ in range(self.num_train_steps):
-            images = next(data_it)  # TODO: Adapt to pairs of images batches
+            images_one, images_two = next(data_it)  
 
             with self.accelerator.autocast():
-                loss = self.byol(images)
+                loss = self.byol(images_one, images_two)
                 self.accelerator.backward(loss)
 
             self.print(f'loss {loss.item():.3f}')
