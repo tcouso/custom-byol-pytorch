@@ -205,6 +205,7 @@ class BYOL(nn.Module):
     ):
         super().__init__()
         self.net = net
+        self.batch_size = batch_size
 
         self.online_encoder = NetWrapper(
             net,
