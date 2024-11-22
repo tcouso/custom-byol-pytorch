@@ -195,6 +195,7 @@ class BYOL(nn.Module):
         self,
         net,
         image_size,
+        batch_size=1,
         hidden_layer=-2,
         projection_size=256,
         projection_hidden_size=4096,
@@ -227,8 +228,8 @@ class BYOL(nn.Module):
 
         # send a mock image tensor to instantiate singleton parameters
         self.forward(
-            torch.randn(2, 3, image_size, image_size, device=device), 
-            torch.randn(2, 3, image_size, image_size, device=device))
+            torch.randn(batch_size, 3, image_size, image_size, device=device),
+            torch.randn(batch_size, 3, image_size, image_size, device=device))
 
     @singleton('target_encoder')
     def _get_target_encoder(self):
@@ -251,21 +252,32 @@ class BYOL(nn.Module):
         image_one,
         image_two,
     ):
-
+        # Ensure batch size consistency
+        assert image_one.shape == image_two.shape, "Images must have the same shape."
         assert (
-            image_one.shape == image_two.shape and image_one.shape[0] > 1
-        ), "Images must have the same shape and batch size must be greater than 1 during training due to batchnorm in the projection layer."
+            image_one.shape[0] == self.batch_size
+        ), f"Input batch size ({image_one.shape[0]}) must match expected batch size ({self.batch_size})."
+        assert (
+            image_one.shape[0] > 1
+        ), "Batch size must be greater than 1 during training due to batchnorm in the projection layer."
 
+        # Concatenate images along the batch dimension
         images = torch.cat((image_one, image_two), dim=0)
 
+        # Forward pass through the online encoder
         online_projections, _ = self.online_encoder(images)
         online_predictions = self.online_predictor(online_projections)
 
+        # Split the projections into two parts
         online_pred_one, online_pred_two = online_predictions.chunk(2, dim=0)
 
+        # Forward pass through the target encoder
         with torch.no_grad():
-            target_encoder = self._get_target_encoder(
-            ) if self.use_momentum else self.online_encoder
+            target_encoder = (
+                self._get_target_encoder()
+                if self.use_momentum
+                else self.online_encoder
+            )
 
             target_projections, _ = target_encoder(images)
             target_projections = target_projections.detach()
@@ -273,8 +285,10 @@ class BYOL(nn.Module):
             target_proj_one, target_proj_two = target_projections.chunk(
                 2, dim=0)
 
+        # Compute loss
         loss_one = loss_fn(online_pred_one, target_proj_two.detach())
         loss_two = loss_fn(online_pred_two, target_proj_one.detach())
 
+        # Combine losses
         loss = loss_one + loss_two
         return loss.mean()
